@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Clipboard Data Display</title>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Poppins', sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f4f4f9;
+            color: #333;
+        }
+        h2 {
+            text-align: center;
+            color: #4a4e69;
+            margin-bottom: 20px;
+        }
+        button {
+            background-color: #4a4e69;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 5px;
+            transition: background-color 0.3s;
+        }
+        button:hover {
+            background-color: #9a8c98;
+        }
+        input[type="text"] {
+            width: calc(100% - 30px);
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            font-size: 16px;
+        }
+        .count {
+            font-weight: bold;
+        }
+        #dataTable {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            background-color: white;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 12px;
+            text-align: left;
+        }
+        th {
+            background-color: #4a4e69;
+            color: white;
+        }
+        tr:hover {
+            background-color: #f2f2f2;
+        }
+        @media (max-width: 600px) {
+            button {
+                width: 100%;
+                margin: 10px 0;
+            }
+            input[type="text"] {
+                width: 100%;
+                margin-bottom: 10px;
+            }
+        }
+    </style>
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-app.js";
+        import { getFirestore, collection, addDoc, getDocs, deleteDoc } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-firestore.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyD_48yTmwE7LmCiZq65t87PAkrCA5pF-40",
+            authDomain: "dop-database-8889a.firebaseapp.com",
+            projectId: "dop-database-8889a",
+            storageBucket: "dop-database-8889a.appspot.com",
+            messagingSenderId: "735546473974",
+            appId: "1:735546473974:web:aa2f8489e7277769581bd7",
+            measurementId: "G-2DGKJVQ8N2"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+
+        async function saveDataToFirestore(data) {
+            try {
+                await addDoc(collection(db, "clipboardData"), { data: data });
+                console.log("Data saved to Firestore");
+            } catch (error) {
+                console.error("Error saving document: ", error);
+            }
+        }
+
+        async function loadDataFromFirestore() {
+            const querySnapshot = await getDocs(collection(db, "clipboardData"));
+            const tbody = document.getElementById('tableBody');
+            tbody.innerHTML = ''; // Clear existing data
+
+            querySnapshot.forEach((doc) => {
+                const data = doc.data().data.split('\n');
+                data.forEach(row => {
+                    const cols = row.split('\t');
+                    const tr = document.createElement('tr');
+                    cols.forEach(col => {
+                        const td = document.createElement('td');
+                        td.textContent = col;
+                        tr.appendChild(td);
+                    });
+                    tbody.appendChild(tr);
+                });
+            });
+
+            updateCounts();
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            loadDataFromFirestore(); // Load data from Firestore on page load
+        });
+
+        document.getElementById('pasteButton').addEventListener('click', async () => {
+            const clipboardText = await navigator.clipboard.readText();
+            const rows = clipboardText.split('\n');
+            const tbody = document.getElementById('tableBody');
+            tbody.innerHTML = ''; // Clear existing data
+
+            rows.forEach(row => {
+                const cols = row.split('\t');
+                const tr = document.createElement('tr');
+                cols.forEach(col => {
+                    const td = document.createElement('td');
+                    td.textContent = col;
+                    tr.appendChild(td);
+                });
+                tbody.appendChild(tr);
+            });
+
+            await saveDataToFirestore(clipboardText); // Save to Firestore
+            updateCounts();
+        });
+
+        document.getElementById('clearButton').addEventListener('click', async () => {
+            const confirmClear = confirm("Are you sure you want to clear all data from Firestore and this page?");
+            if (confirmClear) {
+                const querySnapshot = await getDocs(collection(db, "clipboardData"));
+                const deletePromises = [];
+
+                querySnapshot.forEach(doc => {
+                    deletePromises.push(deleteDoc(doc.ref));
+                });
+
+                await Promise.all(deletePromises);
+                document.getElementById('tableBody').innerHTML = ''; // Clear displayed data
+                updateCounts();
+                alert("All data has been cleared!");
+            }
+        });
+
+        document.getElementById('searchInput').addEventListener('keyup', () => {
+            const filter = document.getElementById('searchInput').value.toLowerCase();
+            const rows = document.querySelectorAll('#tableBody tr');
+            let foundCount = 0;
+
+            rows.forEach(row => {
+                const text = row.textContent.toLowerCase();
+                if (text.includes(filter)) {
+                    row.style.display = '';
+                    foundCount++;
+                } else {
+                    row.style.display = 'none';
+                }
+            });
+
+            document.getElementById('foundCount').textContent = `Found Entries: ${foundCount}`;
+        });
+
+        document.getElementById('clearFilterButton').addEventListener('click', () => {
+            document.getElementById('searchInput').value = '';
+            const rows = document.querySelectorAll('#tableBody tr');
+            rows.forEach(row => {
+                row.style.display = '';
+            });
+            updateCounts();
+        });
+
+        function updateCounts() {
+            const rows = document.querySelectorAll('#tableBody tr');
+            document.getElementById('totalCount').textContent = `Total Entries: ${rows.length}`;
+            document.getElementById('foundCount').textContent = `Found Entries: ${rows.length}`;
+        }
+    </script>
+</head>
+<body>
+
+<h2>Clipboard Data Display</h2>
+
+<div style="text-align: center;">
+    <button id="pasteButton">Paste Data</button>
+    <button id="clearButton">Clear Data</button>
+</div>
+<br>
+
+<div style="text-align: center;">
+    <input type="text" id="searchInput" placeholder="Search...">
+    <button id="clearFilterButton">Clear Filter</button>
+</div>
+
+<div class="count" id="totalCount" style="text-align: center;">Total Entries: 0</div>
+<div class="count" id="foundCount" style="text-align: center;">Found Entries: 0</div>
+
+<table id="dataTable">
+    <thead>
+        <tr>
+            <th>Ref No</th>
+            <th>Account Number</th>
+            <th>Account Name</th>
+            <th>Denomination</th>
+            <th>Deposit Amount</th>
+            <th>Installments</th>
+            <th>Rebate</th>
+            <th>Default Fee</th>
+            <th>ASLAAS Number</th>
+            <th>P.B.F.</th>
+            <th>Status</th>
+            <th>Last Created Date & Time</th>
+            <th>Month Paid</th>
+            <th>Due Date</th>
+            <th>Opened Date</th>
+            <th>Maturity Date</th>
+            <th>Balance</th>
+            <th>Notes</th>
+        </tr>
+    </thead>
+    <tbody id="tableBody">
+        <!-- Pasted data will appear here -->
+    </tbody>
+</table>
+
+</body>
+</html>
